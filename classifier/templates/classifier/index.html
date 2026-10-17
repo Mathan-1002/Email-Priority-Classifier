@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI based email priority classifier</title>
+<style>
+  :root{--bg:#f5f6f8;--card:#fff;--ink:#1c2230;--mute:#667085;--line:#e4e7ec;
+        --high:#d92d20;--med:#b54708;--low:#067647;--high-bg:#fef3f2;--med-bg:#fffaeb;--low-bg:#ecfdf3;--accent:#2e4a8a}
+  *{box-sizing:border-box}
+  body{margin:0;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{padding:20px 16px 8px;max-width:1000px;margin:auto}
+  h1{margin:0;font-size:1.4rem}
+  .sub{color:var(--mute);margin:2px 0 0;font-size:.95rem}
+  main{max-width:1000px;margin:auto;padding:8px 16px 40px;display:grid;gap:16px;grid-template-columns:1fr}
+  @media(min-width:860px){main{grid-template-columns:360px 1fr;align-items:start}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+  label{display:block;font-size:.85rem;color:var(--mute);margin:10px 0 4px}
+  input,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:var(--ink)}
+  input:focus,textarea:focus,button:focus-visible,a:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:#fff;padding:6px 10px;color:var(--ink)}
+  .primary{background:var(--accent);color:#fff;border-color:var(--accent);width:100%;margin-top:14px;padding:10px;font-weight:600}
+  .errorlist{color:var(--high);list-style:none;padding:0;margin:4px 0;font-size:.85rem}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+  .tabs a{text-decoration:none;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:.9rem;background:#fff}
+  .tabs a.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .tabs form{margin-left:auto}
+  .mail{border-top:1px solid var(--line);padding:12px 0}
+  .mail:first-of-type{border-top:0}
+  .row{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+  .subject{font-weight:600;overflow-wrap:anywhere}
+  .meta{color:var(--mute);font-size:.85rem}
+  .snippet{color:var(--mute);margin:4px 0 0;font-size:.9rem;overflow-wrap:anywhere}
+  .badge{padding:2px 10px;border-radius:999px;font-size:.8rem;font-weight:600;white-space:nowrap}
+  .High{background:var(--high-bg);color:var(--high)}
+  .Medium{background:var(--med-bg);color:var(--med)}
+  .Low{background:var(--low-bg);color:var(--low)}
+  .actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .actions button{padding:3px 8px;font-size:.8rem}
+  .empty{color:var(--mute);padding:20px 0;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <h1>AI based email priority classifier</h1>
+  <p class="sub">Paste an email and get its priority: High, Medium or Low.</p>
+</header>
+<main>
+  <section class="card">
+    <form method="post">
+      {% csrf_token %}
+      {% for f in form %}
+        <label for="{{ f.id_for_label }}">{{ f.label }}</label>
+        {{ f }}
+        {{ f.errors }}
+      {% endfor %}
+      <button class="primary" type="submit">Classify email</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="tabs">
+      <a href="{% url 'index' %}" class="{% if not level %}on{% endif %}">All</a>
+      <a href="?priority=High" class="{% if level == 'High' %}on{% endif %}">High ({{ counts.High }})</a>
+      <a href="?priority=Medium" class="{% if level == 'Medium' %}on{% endif %}">Medium ({{ counts.Medium }})</a>
+      <a href="?priority=Low" class="{% if level == 'Low' %}on{% endif %}">Low ({{ counts.Low }})</a>
+      <form method="post" action="{% url 'retrain' %}">{% csrf_token %}<button type="submit" title="Retrain using your corrected labels">Retrain</button></form>
+    </div>
+
+    {% for e in emails %}
+    <article class="mail">
+      <div class="row">
+        <span class="subject">{{ e.subject }}</span>
+        <span class="badge {{ e.priority }}">{{ e.priority }}{% if e.corrected %} (corrected){% else %} {% widthratio e.confidence 1 100 %}%{% endif %}</span>
+      </div>
+      <div class="meta">{% if e.sender %}{{ e.sender }} · {% endif %}{{ e.created|date:"d M, H:i" }}</div>
+      {% if e.body %}<p class="snippet">{{ e.body|truncatechars:140 }}</p>{% endif %}
+      <div class="actions">
+        <form method="post" action="{% url 'relabel' e.pk %}">{% csrf_token %}
+          <input type="hidden" name="priority" value="High"><button>Mark High</button></form>
+        <form method="post" action="{% url 'relabel' e.pk %}">{% csrf_token %}
+          <input type="hidden" name="priority" value="Medium"><button>Mark Medium</button></form>
+        <form method="post" action="{% url 'relabel' e.pk %}">{% csrf_token %}
+          <input type="hidden" name="priority" value="Low"><button>Mark Low</button></form>
+        <form method="post" action="{% url 'delete' e.pk %}">{% csrf_token %}<button>Delete</button></form>
+      </div>
+    </article>
+    {% empty %}
+      <p class="empty">No emails yet. Paste one on the left to classify it.</p>
+    {% endfor %}
+  </section>
+</main>
+</body>
+</html>
